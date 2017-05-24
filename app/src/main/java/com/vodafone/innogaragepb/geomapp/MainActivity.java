@@ -27,6 +27,7 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.animation.LinearInterpolator;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -57,7 +58,11 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 
 
 public class MainActivity extends FragmentActivity implements OnMapReadyCallback, GoogleApiClient.ConnectionCallbacks,
@@ -74,6 +79,7 @@ GoogleApiClient.OnConnectionFailedListener, LocationListener, GoogleMap.OnMarker
     public float minValue;
     public float acceptedValue;
     Context mContext = this;
+    public ArrayList<String> list;
 
     private Handler handler = new Handler();
     public ListView msgView;
@@ -101,8 +107,10 @@ GoogleApiClient.OnConnectionFailedListener, LocationListener, GoogleMap.OnMarker
         /*---------------List of messages initialization - MSG-----------------*/
         msgView = (ListView) findViewById(R.id.listView);
         msgList = new ArrayAdapter<String>(this,
-                android.R.layout.simple_list_item_1);
+               android.R.layout.simple_list_item_1);
+
         msgView.setAdapter(msgList);
+
 
         final Button resultsButton = (Button) findViewById(R.id.resultsButton);
         final Button settingsButton = (Button) findViewById(R.id.settingsButton);
@@ -145,7 +153,19 @@ GoogleApiClient.OnConnectionFailedListener, LocationListener, GoogleMap.OnMarker
         });
 
 
+        msgView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
 
+                switch (position){
+
+                }
+
+
+
+
+            }
+        });
 
 
 
@@ -241,34 +261,34 @@ GoogleApiClient.OnConnectionFailedListener, LocationListener, GoogleMap.OnMarker
         ).setTag(number);
         mMap.setOnMarkerClickListener(this);
         mMap.setInfoWindowAdapter(new GoogleMap.InfoWindowAdapter(){
-                                      @Override
-                                      public View getInfoWindow(Marker arg0) {
-                                          return null;
-                                      }
+            @Override
+            public View getInfoWindow(Marker arg0) {
+                return null;
+            }
 
-                                      @Override
-                                      public View getInfoContents(Marker marker) {
+            @Override
+            public View getInfoContents(Marker marker) {
 
 
-                                          LinearLayout info = new LinearLayout(mContext);
-                                          info.setOrientation(LinearLayout.VERTICAL);
+                LinearLayout info = new LinearLayout(mContext);
+                info.setOrientation(LinearLayout.VERTICAL);
 
-                                          TextView title = new TextView(mContext);
-                                          title.setTextColor(Color.BLACK);
-                                          title.setGravity(Gravity.CENTER);
-                                          title.setTypeface(null, Typeface.BOLD);
-                                          title.setText(marker.getTitle());
+                TextView title = new TextView(mContext);
+                title.setTextColor(Color.BLACK);
+                title.setGravity(Gravity.CENTER);
+                title.setTypeface(null, Typeface.BOLD);
+                title.setText(marker.getTitle());
 
-                                          TextView snippet = new TextView(mContext);
-                                          snippet.setTextColor(Color.GRAY);
-                                          snippet.setText(marker.getSnippet());
+                TextView snippet = new TextView(mContext);
+                snippet.setTextColor(Color.GRAY);
+                snippet.setText(marker.getSnippet());
 
-                                          info.addView(title);
-                                          info.addView(snippet);
+                info.addView(title);
+                info.addView(snippet);
 
-                                          return info;
-                                      }
-                                      });
+                return info;
+            }
+        });
 
 
     }
@@ -419,42 +439,70 @@ GoogleApiClient.OnConnectionFailedListener, LocationListener, GoogleMap.OnMarker
         Integer tag = (Integer) marker.getTag();
         JSONObject dataset = jobj.getJSONObject(String.valueOf(tag));
         Iterator<?> keys = dataset.keys();
-
+        list = new ArrayList<>();
         while(keys.hasNext()){
+
+
             String mKey = (String)keys.next();
-            String mKey2 = mKey.replace(" ","_");
-            int id = getResources().getIdentifier(mKey2, "id", getPackageName());
+
             switch (mKey){
                 case "IntraFreq":
+                    list.add("IntraFreq   >>");
                     break;
                 case "InterFreq":
+                    list.add("InterFreq   >>");
                     break;
                 case "PCC RxD RSSI":
+                    list.add("PCC RxD RSSI   >>");
+
                     break;
                 case "PCC RxM RSSI":
+                    list.add("PCC RxM RSSI   >>");
                     break;
                 case "Serving":
+                    list.add("Serving   >>");
                     break;
                 case "sats":
+                    list.add("Sats   >>");
                     break;
+                case "latitude":
+                    list.add("Latitude: "+dataset.getString(mKey));
+                    break;
+                case "longitude":
+                    list.add("Longitude: "+dataset.getString(mKey));
+                    break;
+                case "altitude m":
+                    list.add("Altitude: "+dataset.getString(mKey));
+                    break;
+
+
                 default:
-                    displayMsg(mKey + ": "+dataset.getString(mKey));
-                    //temp.setText(mKey + ": "+dataset.getString(mKey));
+
+
+                    list.add(mKey.substring(0,1).toUpperCase()+mKey.substring(1) + ": "+dataset.getString(mKey));
+
                     break;
             }
+
+
+            //displayMsg(mKey + ": "+dataset.getString(mKey));
         }
+        Collections.sort(list);
+        System.out.println (list);
+        msgList = new ArrayAdapter<String>(this,android.R.layout.simple_list_item_1, list);
+        displayMsg();
     }
 
 
-    public void displayMsg(String msg) {
+    public void displayMsg() {
 
-            final String data = msg;
+            //final String data = msg;
 
             handler.post(new Runnable() {
                 @Override
                 public void run() {
 
-                    msgList.add(data);
+                   // msgList.add(data);
                     msgView.setAdapter(msgList);
                     msgView.smoothScrollToPosition(msgList.getCount() - 1);
                 }
