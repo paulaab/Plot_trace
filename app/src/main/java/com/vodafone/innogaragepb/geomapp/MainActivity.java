@@ -2,24 +2,37 @@ package com.vodafone.innogaragepb.geomapp;
 
 import android.Manifest;
 import android.animation.ValueAnimator;
+import android.app.Dialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Color;
+import android.graphics.Typeface;
 import android.location.Location;
 
 import android.os.Build;
+import android.os.Handler;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
 import android.support.v4.content.ContextCompat;
+import android.support.v7.app.AlertDialog;
 import android.telephony.TelephonyManager;
 import android.telephony.gsm.GsmCellLocation;
+import android.view.Gravity;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.animation.LinearInterpolator;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.ListView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
@@ -36,6 +49,7 @@ import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -43,22 +57,27 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
+import java.util.Iterator;
 
 
 public class MainActivity extends FragmentActivity implements OnMapReadyCallback, GoogleApiClient.ConnectionCallbacks,
-GoogleApiClient.OnConnectionFailedListener, LocationListener{
+GoogleApiClient.OnConnectionFailedListener, LocationListener, GoogleMap.OnMarkerClickListener {
     private JSONObject jsonObj;
-
+    TextView temp;
     private GoogleMap mMap;
     public Boolean ready;
-    public LatLng myLatLng;
-    public LatLng myLatLng2;
     public static final int MY_PERMISSIONS_REQUEST_LOCATION = 99;
     GoogleApiClient mGoogleApiClient;
     LocationRequest mLocationRequest;
     Marker mCurrentLocation;
     Location mLastLocation;
+    public float minValue;
+    public float acceptedValue;
+    Context mContext = this;
 
+    private Handler handler = new Handler();
+    public ListView msgView;
+    public ArrayAdapter<String> msgList;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -79,14 +98,24 @@ GoogleApiClient.OnConnectionFailedListener, LocationListener{
                 .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
 
+        /*---------------List of messages initialization - MSG-----------------*/
+        msgView = (ListView) findViewById(R.id.listView);
+        msgList = new ArrayAdapter<String>(this,
+                android.R.layout.simple_list_item_1);
+        msgView.setAdapter(msgList);
 
-        final Button speedlimitButton = (Button) findViewById(R.id.speedlimitButton);
+        final Button resultsButton = (Button) findViewById(R.id.resultsButton);
+        final Button settingsButton = (Button) findViewById(R.id.settingsButton);
+        //DEFAULT VALUES
+
+        acceptedValue = -65;
+        minValue = -90;
 
 
         final String jsonString = loadJSONFromAsset("DataJoined.json");
 
         try {
-             jsonObj = new JSONObject(jsonString);
+            jsonObj = new JSONObject(jsonString);
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -94,11 +123,10 @@ GoogleApiClient.OnConnectionFailedListener, LocationListener{
         }
 
 
-        speedlimitButton.setOnClickListener(new View.OnClickListener() {
+        resultsButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                //Sendtraffic icon
-                //setLocation(5000, myLatLng2, myMarker, "pink");
+
                 try {
                     setMarkers(jsonObj);
                 } catch (JSONException e) {
@@ -106,6 +134,23 @@ GoogleApiClient.OnConnectionFailedListener, LocationListener{
                 }
             }
         });
+
+
+        settingsButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+
+                showSettingsDialog();
+            }
+        });
+
+
+
+
+
+
+
+
     }
 
     /**
@@ -120,36 +165,55 @@ GoogleApiClient.OnConnectionFailedListener, LocationListener{
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
-        myLatLng = new LatLng(51.23610018, 6.73155069);
-        myLatLng2 = new LatLng(51.23708092, 6.72972679);
         // Initialize Google Play Services
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M){
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED){
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                 buildGoogleApiClient();
                 mMap.setMyLocationEnabled(true);
             }
-        }
-        else {
+        } else {
             buildGoogleApiClient();
             mMap.setMyLocationEnabled(true);
         }
 
         mMap.getUiSettings().setZoomControlsEnabled(true);
         ready = true;
+
     }
 
-    public void setMarkers(JSONObject mJson)throws JSONException {
+    public void setMarkers(JSONObject mJson) throws JSONException {
         for (int i = 0; i < mJson.length(); i++) {
             try {
-                JSONObject dataset = mJson.getJSONObject(Integer.toString(i));
+                final JSONObject dataset = mJson.getJSONObject(Integer.toString(i));
+
                 final Double latitude = dataset.getDouble("latitude");
                 final Double longitude = dataset.getDouble("longitude");
+
+
+                final Double RSRQ = dataset.getDouble("RSRQ (dB)");
+                final Double SINR = dataset.getDouble("SINR (dB)");
+                final Double RSRP = dataset.getJSONObject("PCC RxD RSSI").getDouble("RSRP (dBm)");
+                final String color;
+                final int number = i;
+
+
+
+
+                if (RSRP <= minValue) {
+                    color = "red";
+                } else if (RSRQ > minValue && RSRP < acceptedValue) {
+                    color = "yellow";
+                } else {
+                    color = "green";
+                }
+
 
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
 
-                        setCoordinates(latitude, longitude);
+                        setCoordinates(latitude, longitude, RSRP, SINR, RSRQ, color, number);
+
 
                     }
                 });
@@ -162,66 +226,65 @@ GoogleApiClient.OnConnectionFailedListener, LocationListener{
     }
 
 
-private void setCoordinates(Double lat, Double lon){
+    private void setCoordinates(Double lat, Double lon, Double rsrp, Double sinr, Double rsrq, String color, int number) {
 
-    int id = getResources().getIdentifier("pink", "drawable", getPackageName());
-    LatLng myPosition = new LatLng(lat, lon);
+        int id = getResources().getIdentifier(color, "drawable", getPackageName());
+        LatLng myPosition = new LatLng(lat, lon);
 
-    mMap.addMarker(new MarkerOptions()
-            .position(myPosition)
-            .icon(BitmapDescriptorFactory.fromResource(id))
-            //.title("Point "+number)
-            //.snippet("Message: " + msg )
+        mMap.addMarker(new MarkerOptions()
+                        .position(myPosition)
+                        .icon(BitmapDescriptorFactory.fromResource(id))
+                        .title("LTE PEGEL")
+                        .snippet("RSRP (dBm): " + rsrp+"\n"+"SINR(dB): "+sinr+"\n"+"RSRQ (dB): "+rsrq)
+                //.snippet("Value RSRQ: " + rsrq)
 
-            );
+        ).setTag(number);
+        mMap.setOnMarkerClickListener(this);
+        mMap.setInfoWindowAdapter(new GoogleMap.InfoWindowAdapter(){
+                                      @Override
+                                      public View getInfoWindow(Marker arg0) {
+                                          return null;
+                                      }
+
+                                      @Override
+                                      public View getInfoContents(Marker marker) {
 
 
+                                          LinearLayout info = new LinearLayout(mContext);
+                                          info.setOrientation(LinearLayout.VERTICAL);
+
+                                          TextView title = new TextView(mContext);
+                                          title.setTextColor(Color.BLACK);
+                                          title.setGravity(Gravity.CENTER);
+                                          title.setTypeface(null, Typeface.BOLD);
+                                          title.setText(marker.getTitle());
+
+                                          TextView snippet = new TextView(mContext);
+                                          snippet.setTextColor(Color.GRAY);
+                                          snippet.setText(marker.getSnippet());
+
+                                          info.addView(title);
+                                          info.addView(snippet);
+
+                                          return info;
+                                      }
+                                      });
 
 
-}
+    }
+
 
 //Customize characteristics of the markers: Size and time to fade
-
-    public Bitmap resizer(String iconName, int width, int height) {
-        Bitmap imgBitmap = BitmapFactory.decodeResource(getResources(), getResources().getIdentifier(iconName, "drawable", getPackageName()));
-        Bitmap resizedBitmap = Bitmap.createScaledBitmap(imgBitmap, width, height, false);
-        return resizedBitmap;
-    }
-
-    public void fadeTime(long duration, Marker marker) {
-
-        final Marker myMarker = marker;
-        ValueAnimator myAnim = ValueAnimator.ofFloat(1, 0);
-        myAnim.setDuration(duration);
-        myAnim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-            @Override
-            public void onAnimationUpdate(ValueAnimator animation) {
-                myMarker.setAlpha((float) animation.getAnimatedValue());
-            }
-        });
-        myAnim.start();
-
-
-
-
-
-
-
-
-    }
 
 
     @Override
     public void onLocationChanged(Location location) {
-       mLastLocation = location;
-        if (mCurrentLocation != null){
+        mLastLocation = location;
+        if (mCurrentLocation != null) {
             mCurrentLocation.remove();
         }
         //Place my location Marker
         LatLng latlong = new LatLng(location.getLatitude(), location.getLongitude());
-        //mCurrentLocation = mMap.addMarker(new MarkerOptions()
-          //  .position(latlong));
-            //.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ROSE)));
 
         //move map camera
         mMap.moveCamera(CameraUpdateFactory.newLatLng(latlong));
@@ -234,15 +297,14 @@ private void setCoordinates(Double lat, Double lon){
     }
 
 
-
     @Override
     public void onConnected(@Nullable Bundle bundle) {
         mLocationRequest = new LocationRequest();
         mLocationRequest.setFastestInterval(1000);
         mLocationRequest.setInterval(1000);
         mLocationRequest.setPriority(LocationRequest.PRIORITY_BALANCED_POWER_ACCURACY);
-        if(ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED){
-            LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest,this);
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
         }
     }
 
@@ -256,7 +318,7 @@ private void setCoordinates(Double lat, Double lon){
 
     }
 
-    protected synchronized void buildGoogleApiClient(){
+    protected synchronized void buildGoogleApiClient() {
         mGoogleApiClient = new GoogleApiClient.Builder(this)
                 .addConnectionCallbacks(this)
                 .addOnConnectionFailedListener(this)
@@ -295,34 +357,36 @@ private void setCoordinates(Double lat, Double lon){
             return true;
         }
     }
-        @Override
-        public void onRequestPermissionsResult(int requestCode,
-        String permissions[], int[] grantResults) {
-            switch (requestCode) {
-                case MY_PERMISSIONS_REQUEST_LOCATION: {
-                    // If request is cancelled, the result arrays are empty.
-                    if (grantResults.length > 0
-                            && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
 
-                        // Permission Granted
-                        if (ContextCompat.checkSelfPermission(this,
-                                Manifest.permission.ACCESS_FINE_LOCATION)
-                                == PackageManager.PERMISSION_GRANTED) {
+    @Override
+    public void onRequestPermissionsResult(int requestCode,
+                                           String permissions[], int[] grantResults) {
+        switch (requestCode) {
+            case MY_PERMISSIONS_REQUEST_LOCATION: {
+                // If request is cancelled, the result arrays are empty.
+                if (grantResults.length > 0
+                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
 
-                            if (mGoogleApiClient == null) {
-                                buildGoogleApiClient();
-                            }
-                            mMap.setMyLocationEnabled(true);
+                    // Permission Granted
+                    if (ContextCompat.checkSelfPermission(this,
+                            Manifest.permission.ACCESS_FINE_LOCATION)
+                            == PackageManager.PERMISSION_GRANTED) {
+
+                        if (mGoogleApiClient == null) {
+                            buildGoogleApiClient();
                         }
-                    } else {
-
-                        // Permission denied, Disable the functionality that depends on this permission.
-                        Toast.makeText(this, "permission denied", Toast.LENGTH_LONG).show();
+                        mMap.setMyLocationEnabled(true);
                     }
-                    return;
+                } else {
+
+                    // Permission denied, Disable the functionality that depends on this permission.
+                    Toast.makeText(this, "permission denied", Toast.LENGTH_LONG).show();
                 }
+                return;
             }
         }
+    }
+
     /*------------------Reading JSON Data------------------------*/
     public String loadJSONFromAsset(String fileName) {
         String json = null;
@@ -351,12 +415,116 @@ private void setCoordinates(Double lat, Double lon){
     }
 
 
+    public void setValues(JSONObject jobj, Marker marker) throws JSONException {
+        Integer tag = (Integer) marker.getTag();
+        JSONObject dataset = jobj.getJSONObject(String.valueOf(tag));
+        Iterator<?> keys = dataset.keys();
+
+        while(keys.hasNext()){
+            String mKey = (String)keys.next();
+            String mKey2 = mKey.replace(" ","_");
+            int id = getResources().getIdentifier(mKey2, "id", getPackageName());
+            switch (mKey){
+                case "IntraFreq":
+                    break;
+                case "InterFreq":
+                    break;
+                case "PCC RxD RSSI":
+                    break;
+                case "PCC RxM RSSI":
+                    break;
+                case "Serving":
+                    break;
+                case "sats":
+                    break;
+                default:
+                    displayMsg(mKey + ": "+dataset.getString(mKey));
+                    //temp.setText(mKey + ": "+dataset.getString(mKey));
+                    break;
+            }
+        }
+    }
+
+
+    public void displayMsg(String msg) {
+
+            final String data = msg;
+
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+
+                    msgList.add(data);
+                    msgView.setAdapter(msgList);
+                    msgView.smoothScrollToPosition(msgList.getCount() - 1);
+                }
+            });
+        }
+
+    @Override
+    public boolean onMarkerClick(Marker marker) {
+        msgList.clear();
+        try {
+            setValues(jsonObj,marker);
+        } catch (JSONException e) {
+            e.printStackTrace();
+
+        }
+        return false;
+    }
 
 
 
 
 
+
+
+    public void showSettingsDialog(){
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        // Get the layout inflater
+        LayoutInflater inflater = this.getLayoutInflater();
+
+        final View dView = inflater.inflate(R.layout.dialog_settings, null);
+        builder.setView(dView);
+        final EditText minimumInput =(EditText) dView.findViewById(R.id.minimumInput);
+        final EditText normalInput =(EditText) dView.findViewById(R.id.normalInput);
+
+
+        // Inflate and set the layout for the dialog
+        // Pass null as the parent view because its going in the dialog layout
+
+                // Add action buttons
+        builder        .setPositiveButton(R.string.continues, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int id) {
+                        acceptedValue = Float.parseFloat(normalInput.getText().toString());
+                        minValue = Float.parseFloat(minimumInput.getText().toString());
+                        try {
+                            setMarkers(jsonObj);
+                        } catch (JSONException e) {
+                            System.out.println("Could not set markers");
+                        }
+
+                    }
+                })
+                .setNegativeButton(R.string.cancel, new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int id) {
+                        dialog.dismiss();
+                    }
+                });
+        AlertDialog ad = builder.create();
+        ad.show();
+
+
+
+    }
 }
+
+
+
+
+
+
 
 
 //http://stackoverflow.com/questions/28109597/gradually-fade-out-a-custom-map-marker

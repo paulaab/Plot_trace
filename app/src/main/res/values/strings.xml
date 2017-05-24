@@ -1,7 +1,7 @@
 <resources>
-    <string name="app_name">GEOM App</string>
+    <string name="app_name">Display Measurements</string>
     <string name="title_activity_main">Map</string>
-    <string name="warningAccident">Accident Alert</string>
-    <string name="warningTrafficJam">Traffic Jam Alert</string>
+    <string name="continues">Apply</string>
+    <string name="cancel">Cancel</string>
 
 </resources>
